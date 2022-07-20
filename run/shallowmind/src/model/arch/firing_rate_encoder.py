@@ -115,7 +115,10 @@ class FiringRateEncoder(pl.LightningModule):
             self.label_smooth = label_smooth
         else:
             self.label_smooth = 0.0
-        self.auxiliary_head = build_head(auxiliary_head)
+        if auxiliary_head is not None:
+            self.auxiliary_head = build_head(auxiliary_head)
+        else:
+            self.auxiliary_head = None
 
     def exact_feat(self, x):
         x = x['images']
