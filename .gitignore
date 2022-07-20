@@ -28,5 +28,9 @@ logs/
 *.json
 *.log
 *.csv
+*.DS_Store
+*.git
+.temp
+.idea/
 notebooks/data
 notebooks/lurz2020
