@@ -70,7 +70,7 @@ data_root = '/home/sensorium/sensorium/notebooks/data'
 size = (32, 64)
 
 albu_train_transforms = [
-    dict(type='CenterCrop', height=size[0], width=size[1], p=1.0),
+    dict(type='Resize', height=size[0], width=size[1], p=1.0),
 ]
 train_pipeline = [
     dict(type='LoadImages', channels_first=False, to_RGB=True),
