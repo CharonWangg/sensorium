@@ -1,11 +1,13 @@
 # Usage
 
 ## Code base
+```
 ├── run  # core part of the program
-│   ├── configs  # all configuration files in .py (create one as you need) 
-│   ├── shallowmind  # core DL framework 
-│   ├── train.py  # training script 
+│   ├── configs  # all configuration files in .py (create one as you need)
+│   ├── shallowmind  # core DL framework
+│   ├── train.py  # training script
 │   ├── train.sh  # training script (for linux)
+```
 
 ## Existed configs
 * sensorium_baseline_dual_head.py # sensorium baseline 0.293 config
