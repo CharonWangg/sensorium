@@ -10,7 +10,7 @@
 ```
 
 ## Existed configs
-* sensorium_baseline_dual_head.py # sensorium baseline 0.293 config
+* sensorium_baseline_dual_head.py # sensorium baseline with auxiliary classification head 0.293 config
 * sensorium_baseline.py # sensorium baseline 0.292 config
 * sensorium_center_crop_baseline.py # sensorium baseline with center crop 0.28+ config
 * sensorium_center_crop_gaussian_blur_baseline.py # sensorium baseline with center crop and gaussian blur 0.27+ config
