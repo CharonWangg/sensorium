@@ -158,7 +158,7 @@ log = dict(
     exp_name='sensorium_cosine_similarity_baseline',
     logger_interval=10,
     monitor='val_correlation',
-    logger=[dict(type='comet', key='Your API key')],
+    logger=[dict(type='comet', key='You API Key')],
     checkpoint=dict(
         type='ModelCheckpoint',
         filename='{exp_name}-{val_dice:.3f}',

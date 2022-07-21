@@ -70,6 +70,7 @@ model = dict(
         dict(type='Correlation'),
         dict(type='AverageCorrelation', by='frame_image_id')
     ]))
+
 dataset_type = 'Sensorium'
 data_root = '/home/sensorium/sensorium/notebooks/data'
 size = (32, 64)
@@ -88,10 +89,12 @@ test_pipeline = [
         transforms=[dict(type='Resize', height=32, width=64, p=1.0)]),
     dict(type='ToTensor')
 ]
+
 mouse = 'static26872-17-20-GrayImageNet-94c6ff995dac583098847cfecd43e7b6.zip'
 data_keys = [
     'images', 'responses', 'behavior', 'pupil_center', 'frame_image_id'
 ]
+
 data = dict(
     train_batch_size=128,
     val_batch_size=128,
@@ -148,13 +151,14 @@ data = dict(
                 transforms=[dict(type='Resize', height=32, width=64, p=1.0)]),
             dict(type='ToTensor')
         ]))
+
 log = dict(
     project_name='sensorium',
     work_dir='/data2/charon/sensorium',
-    exp_name='official_sota_baseline_dual_head',
+    exp_name='sensorium_baseline_dual_head',
     logger_interval=10,
     monitor='val_correlation',
-    logger=[dict(type='comet', key='Your API key')],
+    logger=[dict(type='comet', key='You API Key')],
     checkpoint=dict(
         type='ModelCheckpoint',
         filename='{exp_name}-{val_dice:.3f}',
@@ -169,11 +173,25 @@ log = dict(
         min_delta=0.0001,
         check_finite=True,
         verbose=True))
-resume_from = None
+
+resume_from = '/data2/charon/sensorium/official_sota_baseline_dual_head/ckpts/exp_name=official_sota_baseline_dual_head-cfg=sensorium_baseline-val_correlation=0.293-v2.ckpt'
 cudnn_benchmark = True
+
 optimization = dict(
     type='epoch',
     max_iters=200,
-    optimizer=dict(type='AdamW', lr=0.009),
-    scheduler=dict(type='CosineAnnealing', interval='step', min_lr=0.0))
-base_name = 'sensorium_baseline_dual_head.py'
+    optimizer=dict(type='Adam', lr=9e-3),
+    # scheduler=dict(type='ReduceLROnPlateau',
+    #                interval='epoch',
+    #                monitor='val_correlation',
+    #                mode="max",
+    #                factor=0.3,
+    #                patience=5,
+    #                threshold=1e-6,
+    #                min_lr=0.0001,
+    #                verbose=True,
+    #                threshold_mode="abs"),
+    scheduler=dict(type='CosineAnnealing',
+                   interval='step',
+                   min_lr=0.0)
+)

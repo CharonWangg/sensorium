@@ -1,7 +1,7 @@
 num_classes = 2
 
 loss = [dict(type='PoissonLoss', reduction='sum', scale=True, loss_weight=1.0)]
-cls_loss = [dict(type='TorchLoss', loss_name='CrossEntropyLoss', loss_weight=1e6)]
+# cls_loss = [dict(type='TorchLoss', loss_name='CrossEntropyLoss', loss_weight=1e6)]
 
 model = dict(
     type='FiringRateEncoder',
@@ -53,13 +53,13 @@ model = dict(
                 scale=True,
                 loss_weight=1.0)
         ]),
-    auxiliary_head=dict(
-        type='BaseHead',
-        in_channels=2,
-        channels=None,
-        num_classes=2,
-        losses=cls_loss,
-    ),
+    # auxiliary_head=dict(
+    #     type='BaseHead',
+    #     in_channels=2,
+    #     channels=None,
+    #     num_classes=2,
+    #     losses=cls_loss,
+    # ),
     evaluation=dict(metrics=[
         dict(type='Correlation'),
         dict(type='AverageCorrelation', by='frame_image_id')
@@ -132,7 +132,7 @@ log = dict(
     exp_name='sensorium_baseline',
     logger_interval=10,
     monitor='val_correlation',
-    logger=[dict(type='comet', key='Your API key')],
+    logger=[dict(type='comet', key='You API Key')],
     checkpoint=dict(
         type='ModelCheckpoint',
         filename='{exp_name}-{val_dice:.3f}',
@@ -154,8 +154,18 @@ cudnn_benchmark = True
 optimization = dict(
     type='epoch',
     max_iters=200,
-    optimizer=dict(type='AdamW', lr=9e-3),
-    scheduler=dict(type='CosineAnnealing',
-                   interval='step',
-                   min_lr=0.0)
+    optimizer=dict(type='Adam', lr=9e-3),
+    scheduler=dict(type='ReduceLROnPlateau',
+                   interval='epoch',
+                   monitor='val_correlation',
+                   mode="max",
+                   factor=0.3,
+                   patience=5,
+                   threshold=1e-6,
+                   min_lr=0.0001,
+                   verbose=True,
+                   threshold_mode="abs"),
+    # scheduler=dict(type='CosineAnnealing',
+    #                interval='step',
+    #                min_lr=0.0)
 )

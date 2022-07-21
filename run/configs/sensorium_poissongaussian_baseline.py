@@ -1,6 +1,6 @@
 num_classes = 2
 
-loss = [dict(type='PoissonLikeGaussianLoss', reduction='sum', scale=True, loss_weight=1.0)]
+loss = [dict(type='PoissonGaussianLoss', reduction='sum', scale=True, loss_weight=1.0)]
 # cls_loss = [dict(type='TorchLoss', loss_name='CrossEntropyLoss', loss_weight=1e6)]
 
 model = dict(
@@ -70,7 +70,7 @@ data_root = '/home/sensorium/sensorium/notebooks/data'
 size = (32, 64)
 
 albu_train_transforms = [
-    dict(type='Resize', height=size[0], width=size[1]),
+    dict(type='Resize', height=size[0], width=size[1], p=1.0),
 ]
 train_pipeline = [
     dict(type='LoadImages', channels_first=False, to_RGB=True),
@@ -129,10 +129,10 @@ data = dict(
 log = dict(
     project_name='sensorium',
     work_dir='/data2/charon/sensorium',
-    exp_name='sensorium_baseline',
+    exp_name='sensorium_poissongaussian_baseline',
     logger_interval=10,
     monitor='val_correlation',
-    logger=[dict(type='comet', key='Your API key')],
+    logger=[dict(type='comet', key='You API Key')],
     checkpoint=dict(
         type='ModelCheckpoint',
         filename='{exp_name}-{val_dice:.3f}',
@@ -154,8 +154,18 @@ cudnn_benchmark = True
 optimization = dict(
     type='epoch',
     max_iters=200,
-    optimizer=dict(type='AdamW', lr=9e-3),
-    scheduler=dict(type='CosineAnnealing',
-                   interval='step',
-                   min_lr=0.0)
+    optimizer=dict(type='Adam', lr=9e-3),
+    scheduler=dict(type='ReduceLROnPlateau',
+                   interval='epoch',
+                   monitor='val_correlation',
+                   mode="max",
+                   factor=0.3,
+                   patience=5,
+                   threshold=1e-6,
+                   min_lr=0.0001,
+                   verbose=True,
+                   threshold_mode="abs"),
+    # scheduler=dict(type='CosineAnnealing',
+    #                interval='step',
+    #                min_lr=0.0)
 )

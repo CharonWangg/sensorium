@@ -12,10 +12,19 @@ class ModelInterface(pl.LightningModule):
         model.pop('evaluation')
         self.model = build_arch(model)
 
+    def forward(self, x):
+        # for testing
+        return self.model.forward_test(x)['output']
+
+
     def training_step(self, batch, batch_idx):
         input, label = batch
         output = self.model.forward_train(input, label)
         loss = output['loss']
+        # logging lr
+        for opt in self.trainer.optimizers:
+            # dirty hack to get the name of the optimizer
+            self.log(f"lr_{str(opt).split('(')[0].strip()}", opt.param_groups[0]['lr'], prog_bar=True, on_step=True, on_epoch=False)
         # logging loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss

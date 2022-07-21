@@ -137,7 +137,7 @@ log = dict(
     exp_name='official_sota_baseline_dual_head',
     logger_interval=10,
     monitor='val_correlation',
-    logger=[dict(type='comet', key='Your API key')],
+    logger=[dict(type='comet', key='You API Key')],
     checkpoint=dict(
         type='ModelCheckpoint',
         filename='{exp_name}-{val_dice:.3f}',

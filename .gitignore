@@ -34,3 +34,4 @@ logs/
 .idea/
 notebooks/data
 notebooks/lurz2020
+run/.DS_Store

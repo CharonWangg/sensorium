@@ -82,7 +82,9 @@ def train():
     if cfg.get('resume_from', None) is None:
         model = ModelInterface(cfg.model, cfg.optimization)
     else:
-        model = ModelInterface(cfg.model, cfg.optimization).load_from_checkpoint(cfg.resume_from)
+        model = ModelInterface.load_from_checkpoint(cfg.resume_from,
+                                                    model=cfg.model,
+                                                    optimization=cfg.optimization)
 
     # log
     # callbacks
@@ -116,7 +118,7 @@ def train():
             raise NotImplementedError("Other kind of checkpoints haven't implemented!")
 
     if cfg.optimization.scheduler is not None:
-        callbacks.append(plc.LearningRateMonitor())
+        callbacks.append(plc.LearningRateMonitor(logging_interval='step'))
 
     args.callbacks = callbacks
 
