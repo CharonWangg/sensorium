@@ -36,11 +36,9 @@ def prepare_grid(grid_mean_predictor, dataloaders):
     else:
         grid_mean_predictor = copy.deepcopy(grid_mean_predictor)
         grid_mean_predictor_type = grid_mean_predictor.pop("type")
-
         if grid_mean_predictor_type == "cortex":
-            input_dim = grid_mean_predictor.pop("input_dimensions", 2)
             source_grids = {
-                k: v.dataset.dataset.neurons.cell_motor_coordinates[:, :input_dim]
+                k: v.dataset.dataset.neurons.cell_motor_coordinates
                 for k, v in dataloaders.items()
             }
     return grid_mean_predictor, grid_mean_predictor_type, source_grids
@@ -71,6 +69,22 @@ def get_module_output(model, input_shape, use_cuda=True):
     model.to(initial_device)
     return output[-1].shape
 
+ # Construct dict of mouse: pairwise distances between neurons
+def pairwise_neuron_dist(source_grid):
+    diff_dist = source_grid[:, None, :] - source_grid[None, :, :]
+    euclidean_dist = torch.sqrt(torch.sum(diff_dist**2, dim=-1))
+    return euclidean_dist
+
+# Now convert pairwise distances into a scaled similarity score for each pair of neurons. This score will penalize
+# differences-in-weights.
+def dist2reg(distances, tau=None, scale=1e-1):
+    # default lenght scale to median of pairwise distances
+    if tau is None:
+        i, j = torch.triu_indices(*distances.shape, offset=1)
+        tau = torch.median(distances[i, j])
+    return scale * torch.exp(-distances / tau)
+
+
 @ARCHS.register_module()
 class FiringRateEncoder(pl.LightningModule):
     def __init__(self, backbone, head, auxiliary_head=None, dataloader=None, label_smooth=None):
@@ -81,7 +95,10 @@ class FiringRateEncoder(pl.LightningModule):
         # ****************************Modified from official code******************************************
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
         in_name, out_name = "images", "responses"
-        dataloader = dataloader.loaders
+        if not isinstance(dataloader, torch.utils.data.DataLoader):
+            dataloader = dataloader.loaders
+        else:
+            dataloader = {dataloader.dataset.subject: dataloader}
         session_shape_dict ={k: {kk: np.array(vv).shape for kk, vv in next(iter(v))[0].items()} for k, v in dataloader.items()}
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
@@ -109,7 +126,17 @@ class FiringRateEncoder(pl.LightningModule):
             head.loader = dataloader
             head.grid_mean_predictor_type = grid_mean_predictor_type
             head.grid_mean_predictor = grid_mean_predictor
-            head.source_grids = source_grids
+            head.in_channels = head.grid_mean_predictor.pop('input_dimensions', 2)
+            head.source_grids = {k: v[:, :head.in_channels] for k, v in source_grids.items()}
+
+            # tikhanov_regularization
+            if head.get('tikhonov_regularization', None) is not None:
+                # redundant call source_grids
+                pairwise_neuron_distances = {k: pairwise_neuron_dist(torch.tensor(v, dtype=torch.float32))
+                                             for k, v in source_grids.items()}
+                pairwise_neuron_similarities = {k: dist2reg(dist, scale=head.pop('tikhonov_regularization'))
+                                                for k, dist in pairwise_neuron_distances.items()}
+                head.spatial_similarity = pairwise_neuron_similarities
         self.head = build_head(head)
         # ****************************Modified from official code******************************************
         if label_smooth is not None:
@@ -121,8 +148,8 @@ class FiringRateEncoder(pl.LightningModule):
                 for idx, head in enumerate(auxiliary_head):
                     if idx == 0:
                         self.source_grids = {
-                            k: torch.tensor(v.dataset.dataset.neurons.cell_motor_coordinates[:, :head.get('in_channels', 2)], dtype=torch.float32)
-                            for k, v in dataloader.items()
+                            k: torch.tensor(v[:, :head.in_channels], dtype=torch.float32)
+                            for k, v in source_grids.items()
                         }
                         self.embedding_head = build_head(head)
                     else:

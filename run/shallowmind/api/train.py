@@ -82,9 +82,23 @@ def train():
     if cfg.get('resume_from', None) is None:
         model = ModelInterface(cfg.model, cfg.optimization)
     else:
-        model = ModelInterface.load_from_checkpoint(cfg.resume_from,
-                                                    model=cfg.model,
-                                                    optimization=cfg.optimization)
+        if not cfg.model.pop('pretrained', False):
+            model = ModelInterface.load_from_checkpoint(cfg.resume_from,
+                                                        model=cfg.model,
+                                                        optimization=cfg.optimization)
+        else:
+            # load partial pretrained weights
+            model = ModelInterface(cfg.model, cfg.optimization)
+            pretrained_dict = torch.load(cfg.resume_from)['state_dict']
+            model_dict = model.state_dict()
+            # 1. filter out unnecessary keys
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+            print(f'Loaded pretrained state_dict: {pretrained_dict}')
+            # 2. overwrite entries in the existing state dict
+            model_dict.update(pretrained_dict)
+            model.load_state_dict(model_dict)
+            # prevent optimization conflicting in the fresh training
+            cfg.resume_from = None
 
     # log
     # callbacks
@@ -148,10 +162,7 @@ def train():
     # load trainer
     trainer = Trainer.from_argparse_args(args)
 
-    if cfg.resume_from is None:
-        trainer.fit(model, data_module)
-    else:
-        trainer.fit(model, data_module, ckpt_path=cfg.resume_from)
+    trainer.fit(model, data_module, ckpt_path=cfg.get('resume_from', None))
 
     trainer.test(model, data_module)
 
