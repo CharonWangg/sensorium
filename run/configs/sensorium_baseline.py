@@ -39,27 +39,14 @@ model = dict(
         init_sigma=0.1,
         gamma_readout=0.0076,
         gauss_type='full',
-        elu_offset=0,
+        elu_offset=0.0,
         grid_mean_predictor=dict(
             type='cortex',
             input_dimensions=2,
             hidden_layers=1,
             hidden_features=30,
             final_tanh=True),
-        losses=[
-            dict(
-                type='PoissonLoss',
-                reduction='sum',
-                scale=True,
-                loss_weight=1.0)
-        ]),
-    # auxiliary_head=dict(
-    #     type='BaseHead',
-    #     in_channels=2,
-    #     channels=None,
-    #     num_classes=2,
-    #     losses=cls_loss,
-    # ),
+        losses=loss),
     evaluation=dict(metrics=[
         dict(type='Correlation'),
         dict(type='AverageCorrelation', by='frame_image_id')
@@ -99,30 +86,27 @@ data = dict(
     test_batch_size=128,
     num_workers=4,
     train=dict(
-        type='Sensorium',
+        type=dataset_type,
         tier='train',
-        data_root='/home/sensorium/sensorium/notebooks/data',
+        data_root=data_root,
         feature_dir=mouse,
         data_keys=data_keys,
-        sampler=None,
         pipeline=train_pipeline,
     ),
     val=dict(
-        type='Sensorium',
+        type=dataset_type,
         tier='validation',
-        data_root='/home/sensorium/sensorium/notebooks/data',
+        data_root=data_root,
         feature_dir=mouse,
         data_keys=data_keys,
-        sampler=None,
         pipeline=test_pipeline,
     ),
     test=dict(
-        type='Sensorium',
+        type=dataset_type,
         tier='test',
-        data_root='/home/sensorium/sensorium/notebooks/data',
+        data_root=data_root,
         feature_dir=mouse,
         data_keys=data_keys,
-        sampler=None,
         pipeline=test_pipeline,
     ))
 
@@ -132,10 +116,9 @@ log = dict(
     exp_name='sensorium_baseline',
     logger_interval=10,
     monitor='val_correlation',
-    logger=[dict(type='comet', key='You API Key')],
+    logger=[dict(type='comet', key='oYour API Key')],
     checkpoint=dict(
         type='ModelCheckpoint',
-        filename='{exp_name}-{val_dice:.3f}',
         top_k=1,
         mode='max',
         verbose=True,
@@ -150,6 +133,7 @@ log = dict(
 
 resume_from = None
 cudnn_benchmark = True
+deterministic = False
 
 optimization = dict(
     type='epoch',
@@ -162,7 +146,7 @@ optimization = dict(
                    factor=0.3,
                    patience=5,
                    threshold=1e-6,
-                   min_lr=0.0001,
+                   min_lr=1e-4,
                    verbose=True,
                    threshold_mode="abs"),
     # scheduler=dict(type='CosineAnnealing',

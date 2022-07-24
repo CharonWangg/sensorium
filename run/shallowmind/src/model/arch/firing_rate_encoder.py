@@ -1,12 +1,13 @@
+import copy
 import torch
+import numpy as np
 import torch.nn as nn
 import pytorch_lightning as pl
 from ..utils import add_prefix
 from ..builder import ARCHS
-from ..builder import build_backbone, build_head
+from ..builder import build_backbone, build_neck, build_head
 from neuralpredictors.training.context_managers import eval_state
-import copy
-import numpy as np
+
 
 def prepare_grid(grid_mean_predictor, dataloaders):
     """
@@ -37,13 +38,14 @@ def prepare_grid(grid_mean_predictor, dataloaders):
         grid_mean_predictor = copy.deepcopy(grid_mean_predictor)
         grid_mean_predictor_type = grid_mean_predictor.pop("type")
         if grid_mean_predictor_type == "cortex":
+            input_dims = grid_mean_predictor.pop("input_dimensions", 2)
             source_grids = {
-                k: v.dataset.dataset.neurons.cell_motor_coordinates
+                k: v.dataset.dataset.neurons.cell_motor_coordinates[:, :input_dims]
                 for k, v in dataloaders.items()
             }
     return grid_mean_predictor, grid_mean_predictor_type, source_grids
 
-def get_module_output(model, input_shape, use_cuda=True):
+def get_module_output(model, input_shape, in_index=-1, use_cuda=True):
     """
     Return the output shape of the model when fed in an array of `input_shape`.
     Note that a zero array of shape `input_shape` is fed into the model and the
@@ -67,7 +69,7 @@ def get_module_output(model, input_shape, use_cuda=True):
             input = torch.zeros(1, *input_shape[1:], device=device)
             output = model.to(device)(input)
     model.to(initial_device)
-    return output[-1].shape
+    return output[in_index].shape
 
  # Construct dict of mouse: pairwise distances between neurons
 def pairwise_neuron_dist(source_grid):
@@ -87,7 +89,7 @@ def dist2reg(distances, tau=None, scale=1e-1):
 
 @ARCHS.register_module()
 class FiringRateEncoder(pl.LightningModule):
-    def __init__(self, backbone, head, auxiliary_head=None, dataloader=None, label_smooth=None):
+    def __init__(self, backbone, head, neck=None, auxiliary_head=None, dataloader=None, label_smooth=None):
         super(FiringRateEncoder, self).__init__()
         if dataloader is None:
             raise ValueError('dataloader is required for initializing FiringRateEncoder')
@@ -103,6 +105,8 @@ class FiringRateEncoder(pl.LightningModule):
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
+        # self.image_saliency = nn.Parameter(torch.ones(3, 32, 64))
+
         core_input_channels = (
             list(input_channels.values())[0]
             if isinstance(input_channels, dict)
@@ -115,8 +119,16 @@ class FiringRateEncoder(pl.LightningModule):
             backbone.input_channels = core_input_channels
         self.backbone = build_backbone(backbone)
 
+        if neck is not None:
+            neck.in_channels = getattr(self.backbone, 'feature_channels', [64])
+            self.neck = build_neck(neck)
+        else:
+            self.neck = None
+        feat_exactor = [self.backbone, self.neck] if self.neck is not None else [self.backbone]
+
         in_shapes_dict = {
-            k: get_module_output(self.backbone, v[in_name])[1:]
+            k: get_module_output(nn.Sequential(*feat_exactor)
+                                 , v[in_name], in_index=head.get('in_index', -1))[1:]
             for k, v in session_shape_dict.items()
         }
 
@@ -126,8 +138,7 @@ class FiringRateEncoder(pl.LightningModule):
             head.loader = dataloader
             head.grid_mean_predictor_type = grid_mean_predictor_type
             head.grid_mean_predictor = grid_mean_predictor
-            head.in_channels = head.grid_mean_predictor.pop('input_dimensions', 2)
-            head.source_grids = {k: v[:, :head.in_channels] for k, v in source_grids.items()}
+            head.source_grids = source_grids
 
             # tikhanov_regularization
             if head.get('tikhonov_regularization', None) is not None:
@@ -143,14 +154,12 @@ class FiringRateEncoder(pl.LightningModule):
             self.label_smooth = label_smooth
         else:
             self.label_smooth = 0.0
+
         if auxiliary_head is not None:
             if isinstance(auxiliary_head, list) and len(auxiliary_head) > 1:
                 for idx, head in enumerate(auxiliary_head):
                     if idx == 0:
-                        self.source_grids = {
-                            k: torch.tensor(v[:, :head.in_channels], dtype=torch.float32)
-                            for k, v in source_grids.items()
-                        }
+                        self.source_grids = copy.deepcopy(source_grids)
                         self.embedding_head = build_head(head)
                     else:
                         self.auxiliary_head = build_head(head)
@@ -165,6 +174,8 @@ class FiringRateEncoder(pl.LightningModule):
     def exact_feat(self, x):
         x = x['images']
         x = self.backbone(x)
+        if self.neck is not None:
+            x = self.neck(x)
         return x
 
     def prepare_cls_data(self, feat, label=None):
@@ -185,12 +196,12 @@ class FiringRateEncoder(pl.LightningModule):
 
         return [feat], label
 
-    def regularizer(self, key=None):
+    def regularizer(self, data_key=None):
         regularization = torch.zeros(1, device=self.device)
         if getattr(self.backbone.model, 'regularizer', None) is not None:
             regularization += self.backbone.model.regularizer()
         if getattr(self.head.model, 'regularizer', None) is not None:
-            regularization += self.head.model.regularizer(data_key=key)
+            regularization += self.head.model.regularizer(data_key=data_key)
         return regularization
 
     def forward_decode_train(self, feat, label, **kwargs):
@@ -218,9 +229,9 @@ class FiringRateEncoder(pl.LightningModule):
 
         # add regularization
         if x.get('subject', None) is not None:
-            loss.update({'regularization_loss': self.regularizer(x['subject'][0])})
+            loss.update({'RegularizationLoss': self.regularizer(data_key=x['subject'][0])})
         else:
-            loss.update({'regularization_loss': self.regularizer()})
+            loss.update({'RegularizationLoss': self.regularizer()})
         # sum up all losses
         loss.update({'loss': sum([loss[k] for k in loss.keys() if 'loss' in k.lower()])})
 
@@ -233,12 +244,13 @@ class FiringRateEncoder(pl.LightningModule):
             res = self.head.forward_test(feat, label, data_key=x['subject'][0])
         else:
             res = self.head.forward_test(feat, label)
+
         if self.auxiliary_head is not None:
             feat, label = self.prepare_cls_data(feat, label)
             cls = self.auxiliary_head.forward_test(feat, label)
             p = cls.pop('output')[..., 1].sigmoid()
             res.update(add_prefix(f'auxhead', cls))
-            res.update({'output': res['output'] * torch.where(p < 0.4, torch.zeros_like(p), torch.ones_like(p))})
+            res.update({'output': res['output'] * torch.where(p < 0.5, torch.zeros_like(p), torch.ones_like(p))})
 
         # sum up all losses
         if label is not None:

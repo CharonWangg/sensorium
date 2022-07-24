@@ -114,7 +114,6 @@ data = dict(
         data_root='/home/sensorium/sensorium/notebooks/data',
         feature_dir=mouse,
         data_keys=data_keys,
-        sampler=None,
         pipeline=train_pipeline,
     ),
     val=dict(
@@ -123,7 +122,6 @@ data = dict(
         data_root='/home/sensorium/sensorium/notebooks/data',
         feature_dir=val_mouse,
         data_keys=data_keys,
-        sampler=None,
         pipeline=test_pipeline,
     ),
     test=dict(
@@ -132,7 +130,6 @@ data = dict(
         data_root='/home/sensorium/sensorium/notebooks/data',
         feature_dir=val_mouse,
         data_keys=data_keys,
-        sampler=None,
         pipeline=test_pipeline,
     ))
 
@@ -142,10 +139,9 @@ log = dict(
     exp_name='sensorium_mice_baseline',
     logger_interval=10,
     monitor='val_correlation',
-    logger=[dict(type='comet', key='You API Key')],
+    logger=[dict(type='comet', key='Your API Key')],
     checkpoint=dict(
         type='ModelCheckpoint',
-        filename='{exp_name}-{val_dice:.3f}',
         top_k=1,
         mode='max',
         verbose=True,

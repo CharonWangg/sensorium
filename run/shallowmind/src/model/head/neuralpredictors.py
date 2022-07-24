@@ -13,11 +13,13 @@ class MultipleReadoutWrapper(readouts.MultiReadoutSharedParametersBase):
 @HEADS.register_module()
 class NeuralPredictors(BaseHead):
     '''call the backbones in NeuralPredictors library'''
-    def __init__(self, model_name, multiple=False, elu_offset=0, in_channels=32, channels=None,
+    def __init__(self, model_name, multiple=False, elu_offset=0.0, in_channels=32, channels=None,
                  num_classes=2, dropout=0.1, act_cfg=dict(type='ReLU'), norm_cfg=dict(type='BatchNorm1d'), in_index=-1,
                  losses=dict(type='TorchLoss', loss_name='CrossEntropyLoss', loss_weight=1.0),
                  **kwargs):
-        super(NeuralPredictors, self).__init__(in_channels, channels, num_classes, dropout, in_index, act_cfg, norm_cfg, losses)
+        super(NeuralPredictors, self).__init__(in_channels=in_channels, channels=channels, num_classes=num_classes,
+                                               dropout=dropout, in_index=in_index, act_cfg=act_cfg, norm_cfg=norm_cfg,
+                                               losses=losses)
         self.elu_offset = elu_offset
         if multiple:
             self.model = MultipleReadoutWrapper(model_name, **kwargs)

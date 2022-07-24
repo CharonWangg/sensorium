@@ -51,32 +51,35 @@ def train():
     else:
         os.makedirs(os.path.join(cfg.log.work_dir, cfg.log.exp_name))
         cfg.dump(os.path.join(cfg.log.work_dir, cfg.log.exp_name, cfg.base_name))
+
     # 5 part: model(arch, loss, ) -> ModelInterface /data(file i/o, preprocess pipeline) -> DataInterface
     # /optimization(optimizer, scheduler, epoch/iter...) -> ModelInterface/
     # log(logger, checkpoint, work_dir) -> Trainer /other
 
    # other setting
-    if cfg.cudnn_benchmark:
+    if cfg.get('cudnn_benchmark', True):
         torch.backends.cudnn.benchmark = True
+
+    if cfg.get('deterministic', False):
+        if cfg.get('cudnn_benchmark', True):
+            print('cudnn_benchmark will be disabled')
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
     # data
     data_module = DataInterface(cfg.data)
 
-    # model
-    # TODO: more elegantly infer the max_iters when in max_epochs mode
     # optimization
     if cfg.optimization.type == 'epoch':
         args.max_epochs = cfg.optimization.max_iters
-        cfg.optimization.max_epochs = cfg.optimization.max_iters
-        cfg.optimization.max_iters = data_module.inner_iters * cfg.optimization.max_epochs
     elif cfg.optimization.type == 'iter':
         args.max_steps = cfg.optimization.max_iters
-        cfg.optimization.max_epochs = cfg.optimization.max_iters//data_module.inner_iters
     else:
         raise NotImplementedError('You must choose optimziation update step from (epoch/iter)')
 
     # for models need setting readout layer with dataloader information
     if cfg.model.pop('need_dataloader', False):
+        data_module.setup(stage='fit')
         cfg.model.dataloader = data_module.train_dataloader()
 
     if cfg.get('resume_from', None) is None:
@@ -106,13 +109,13 @@ def train():
     # used to control early stopping
     if cfg.log.earlystopping is not None:
         callbacks.append(plc.EarlyStopping(
-            monitor=cfg.log.monitor,
-            mode=cfg.log.earlystopping.mode,
-            strict=cfg.log.earlystopping.strict,
-            patience=cfg.log.earlystopping.patience,
-            min_delta=cfg.log.earlystopping.min_delta,
-            check_finite=cfg.log.earlystopping.check_finite,
-            verbose=cfg.log.earlystopping.verbose
+            monitor=cfg.log.get('monitor', 'val_loss'),
+            mode=cfg.log.earlystopping.get('mode', 'max'),
+            strict=cfg.log.earlystopping.get('strict', False),
+            patience=cfg.log.earlystopping.get('patience', 5),
+            min_delta=cfg.log.earlystopping.get('min_delta', 1e-5),
+            check_finite=cfg.log.earlystopping.get('check_finite', True),
+            verbose=cfg.log.earlystopping.get('verbose', True)
         ))
     # used to save the best model
     if cfg.log.checkpoint is not None:
@@ -122,6 +125,7 @@ def train():
                 dirpath=os.path.join(cfg.log.work_dir, cfg.log.exp_name, 'ckpts'),
                 filename=f'exp_name={cfg.log.exp_name}-' + \
                         f'cfg={cfg.base_name.strip(".py")}-' + \
+                        f'bs={cfg.data.train_batch_size}-'+ \
                         f'{{{cfg.log.monitor}:.3f}}',
                 save_top_k=cfg.log.checkpoint.top_k,
                 mode=cfg.log.checkpoint.mode,
@@ -131,15 +135,15 @@ def train():
         else:
             raise NotImplementedError("Other kind of checkpoints haven't implemented!")
 
-    if cfg.optimization.scheduler is not None:
-        callbacks.append(plc.LearningRateMonitor(logging_interval='step'))
-
-    args.callbacks = callbacks
+    # if cfg.optimization.scheduler is not None: (has been build in model_interface)
+    #     callbacks.append(plc.LearningRateMonitor(logging_interval='step'))
 
     # Disable ProgressBar
     # callbacks.append(plc.progress.TQDMProgressBar(
     #     refresh_rate=0,
     # ))
+
+    args.callbacks = callbacks
 
     # logger
     if cfg.log.logger is not None:

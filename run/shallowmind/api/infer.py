@@ -24,6 +24,7 @@ def prepare_inference(cfg, ckpt):
 
     # for models need setting readout layer with dataloader information
     if cfg.model.pop('need_dataloader', False):
+        data_module.setup(stage='fit')
         cfg.model.dataloader = data_module.train_dataloader()
 
     # load checkpoint
